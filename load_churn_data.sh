@@ -1,13 +1,13 @@
 #! /bin/sh
 
-cat <<EOF
+cat <<EOF | snow sql -i
 use role $SF_ROLE;
 
 create database if not exists $SF_DB;
 create schema if not exists $SF_DB.$SF_SCH;
 use $SF_DB.$SF_SCH;
 
-create stage if not exists data;
+create temporary stage if not exists data;
 
 put file://$PWD/CUSTOMER_CHURN_DATASET.csv @data/ overwrite = true;
 
