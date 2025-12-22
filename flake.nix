@@ -12,7 +12,7 @@
 
     in {
       devShells.default = pkgs.mkShell {
-        name = "aiml-dashboard";
+        name = "churn";
         venvDir = "./.venv";
         buildInputs = with pkgs.python312Packages; [
           pkgs.ruff
@@ -20,6 +20,10 @@
           python
           venvShellHook
         ];
+        postVenvCreation = ''
+          unset SOURCE_DATE_EPOCH
+          pip install -r requirements.txt
+        '';
       };
     };
 

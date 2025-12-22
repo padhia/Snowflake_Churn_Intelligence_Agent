@@ -29,11 +29,13 @@ class Datasets(NamedTuple):
 @dataclass
 class MLPipeline:
     session: Session
-    table: str
+    churn_table: str
+    churn_explain_table: str
+    model_name: str
 
     @cached_property
     def df_raw(self) -> pd.DataFrame:
-        return self.session.table(self.table).to_pandas().dropna()
+        return self.session.table(self.churn_table).to_pandas().dropna()
 
     @cached_property
     def data(self) -> Datasets:
@@ -81,20 +83,7 @@ class MLPipeline:
     def reg(self) -> Registry:
         return Registry(session=self.session)
 
-    @cached_property
-    def model(self) -> ModelVersion:
-        """
-        create and log the best performing model obtained by tuning hyperparameters
-        """
-        MODEL_NAME = "CUSTOMER_CHURN_MODEL"
-
-        try:
-            model = self.reg.get_model(MODEL_NAME)
-            print(f"Model '{MODEL_NAME}' already registered, skipping creating a new version")
-            return model.version("LAST")
-        except ValueError:
-            pass
-
+    def train_model(self) -> ModelVersion:
         print("Create a new model using training data...")
         # 8. Hyperparameter tuning
         param_grid = {
@@ -121,7 +110,7 @@ class MLPipeline:
         best_model = search.best_estimator_
 
         mv = self.reg.log_model(
-            model_name=MODEL_NAME,
+            model_name=self.model_name,
             model=best_model,
             sample_input_data=self.data.train_x.head(100),
             target_platforms=["WAREHOUSE"],
@@ -130,6 +119,19 @@ class MLPipeline:
         self.reg.show_models()
 
         return mv
+
+    @cached_property
+    def model(self) -> ModelVersion:
+        """
+        create and log the best performing model obtained by tuning hyperparameters
+        """
+        try:
+            model = self.reg.get_model(self.model_name)
+            print(f"Model '{self.model_name}' already registered, skipping creating a new version")
+            return model.version("LAST")
+        except ValueError:
+            return self.train_model()
+            pass
 
     @cached_property
     def inferred(self) -> pd.DataFrame:
@@ -167,7 +169,7 @@ class MLPipeline:
         """
         write inferred data to Snowflake table
         """
-        self.session.create_dataframe(self.inferred).write.mode("overwrite").save_as_table("CUSTOMER_CHURN_EXPLAINATION")
+        self.session.create_dataframe(self.inferred).write.mode("overwrite").save_as_table(self.churn_explain_table)
 
 
 def get_session() -> Session:
@@ -187,7 +189,7 @@ def get_session() -> Session:
 
 
 def main():
-    MLPipeline(get_session(), "CUSTOMER_CHURN").run()
+    MLPipeline(get_session(), "CUSTOMER_CHURN", "CUSTOMER_CHURN_EXPLAINATION", "CUSTOMER_CHURN_MODEL").run()
 
 
 if __name__ == "__main__":
